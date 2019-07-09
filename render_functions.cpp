@@ -1,7 +1,11 @@
 #include <cmath>
 #include <algorithm>
+#include <vector>
 #include "render_headers.h"
 using namespace std;
+
+unsigned int length = 0;
+unsigned int volume;
 
 VERTEX *set_vertex(int x, int y, double z) {
 	VERTEX *out_vertex = (VERTEX*)malloc(sizeof(VERTEX));
@@ -34,13 +38,13 @@ RGB *set_color(unsigned char R, unsigned char G, unsigned char B) {
 	return clr_of_pix;
 }
 
-bool check_coord(double **z_buf, int x, int y, int z) {
+bool check_coord(double **z_buf, int x, int y, double z) {
 	if (z > z_buf[y][x])
 		return 1; //mean that we can draw
-	return 0;
+	return false;
 }
 
-void write_z_coord(double **z_buf, int x, int y, int z) {
+void write_z_coord(double **z_buf, int x, int y, double z) {
 	z_buf[y][x] = z;
 }
 
@@ -48,7 +52,9 @@ double count_z_coord(int x, LINE *line) {
 	if (0 == (line->two.x - line->one.x))
 		return line->one.z;
 	double div = (line->two.z - line->one.z) / (double)(line->two.x - line->one.x);
-	return div * (double)(x - line->one.x) + line->one.z;
+	double out_value = div * (double)(x - line->one.x) + line->one.z;
+	free(line);
+	return out_value;
 }
 
 int set_side(int side) {
@@ -60,6 +66,7 @@ int set_side(int side) {
 }
 
 void plot(RGB *front_color, RGB *back_color, double	transparency) {
+	//alpha-channel method
 	back_color->red   = (unsigned char)((double)back_color->red   * (1.0 - transparency) + (double)front_color->red   * transparency);
 	back_color->green = (unsigned char)((double)back_color->green * (1.0 - transparency) + (double)front_color->green * transparency);
 	back_color->blue  = (unsigned char)((double)back_color->blue  * (1.0 - transparency) + (double)front_color->blue  * transparency);
@@ -67,16 +74,20 @@ void plot(RGB *front_color, RGB *back_color, double	transparency) {
 
 void draw_line_WU(RGB **image, RGB *color, LINE *line) {
 	if (line->one.y == line->two.y)      // "plain" line
-		for (int x = line->one.x; x <= line->two.x; x++)
-			image[line->one.y][x] = *color;
-
+		for (int x = line->one.x; x <= line->two.x; x++) {
+			if (check_borders(line->one.y, x))
+				image[line->one.y][x] = *color;
+		}
 	else if (line->one.x == line->two.x) // "plain" line
-		for (int y = line->one.y; y <= line->two.y; y++)
-			image[y][line->one.x] = *color;
-
+		for (int y = line->one.y; y <= line->two.y; y++) {
+			if (check_borders(y, line->one.x))
+				image[y][line->one.x] = *color;
+		}
 	else {
-		image[line->one.y][line->one.x] = *color;
-		image[line->two.y][line->two.x] = *color;
+		if (check_borders(line->one.y, line->one.x))
+			image[line->one.y][line->one.x] = *color;
+		if (check_borders(line->two.y, line->two.x))
+			image[line->two.y][line->two.x] = *color;
 		bool pitch_f = 0, left_f = 0;
 		int dx = line->two.x - line->one.x;
 		int dy = line->two.y - line->one.y;
@@ -107,28 +118,37 @@ void draw_line_WU(RGB **image, RGB *color, LINE *line) {
 			double intens = error - tmp;
 			if (left_f) {
 				if (pitch_f) {
-					plot(color, &image[x][tmp - dy], 1 - intens);
-					plot(color, &image[x][tmp - dy + 1], intens);
+					if (check_borders(x, tmp - dy))
+						plot(color, &image[x][tmp - dy], 1 - intens);
+					if (check_borders(x, tmp - dy + 1))
+						plot(color, &image[x][tmp - dy + 1], intens);
 				}
 				else {
-					plot(color, &image[tmp - dy][x], 1 - intens);
-					plot(color, &image[tmp - dy + 1][x], intens);
+					if (check_borders(tmp - dy, x))
+						plot(color, &image[tmp - dy][x], 1 - intens);
+					if (check_borders(tmp - dy + 1, x))
+						plot(color, &image[tmp - dy + 1][x], intens);
 				}
 			}
 			else if (pitch_f) {
-				plot(color, &image[x][tmp], 1 - intens);
-				plot(color, &image[x][tmp + 1], intens);
+				if (check_borders(x, tmp))
+					plot(color, &image[x][tmp], 1 - intens);
+				if (check_borders(x, tmp + 1))
+					plot(color, &image[x][tmp + 1], intens);
 			}
 			else {
-				plot(color, &image[tmp][x], 1 - intens);
-				plot(color, &image[tmp + 1][x], intens);
+				if (check_borders(tmp, x))
+					plot(color, &image[tmp][x], 1 - intens);
+				if (check_borders(tmp + 1, x))
+					plot(color, &image[tmp + 1][x], intens);
 			}
 			error += d_error;
 		}
 	}
+	free(line);
 }
 
-VERTEX *read_vertex(FILE *in_obj, VERTEX *vertexes, unsigned int counter) {
+VERTEX *read_vertex(FILE *in_obj, VERTEX *vertices, unsigned int counter, unsigned int zoom) {
 	char number[8];
 	char tmp;
 	bool neg;
@@ -147,46 +167,52 @@ VERTEX *read_vertex(FILE *in_obj, VERTEX *vertexes, unsigned int counter) {
 		}
 		// 250 is the scale (250 to 1)
 		if (j == 0) {
-			vertexes[counter].x = (int)(atof(number) * 250);
+			vertices[counter].x = (int)(atof(number) * zoom + 0.5);
 			if (neg)
-				vertexes[counter].x *= -1;
+				vertices[counter].x *= -1;
 		}
 		else if (j == 1) {
-			vertexes[counter].y = (int)(atof(number) * 250);
+			vertices[counter].y = (int)(atof(number) * zoom + 0.5);
 			if (neg)
-				vertexes[counter].y *= -1;
+				vertices[counter].y *= -1;
 		}
 		else {
-			vertexes[counter].z = (double)((int)(atof(number) * 250));
+			vertices[counter].z = atof(number);
 			if (neg)
-				vertexes[counter].z *= -1;
+				vertices[counter].z *= -1;
 		}
 	}
-	return vertexes;
+	top_x = max(top_x, vertices[counter].x);
+	top_y = max(top_y, vertices[counter].y);
+	bottom_x = min(bottom_x, vertices[counter].x);
+	bottom_y = min(bottom_y, vertices[counter].y);
+	return vertices;
 }
 
-VERTEX *read_obj(FILE *in_obj) {
-	VERTEX *vertexes = (VERTEX*)malloc(sizeof(VERTEX) * 2);
+VERTEX *read_obj(FILE *in_obj, unsigned int zoom) {
+	VERTEX *vertices = (VERTEX*)malloc(sizeof(VERTEX) * 2);
 	unsigned int counter = 1;
 	char tmp = fgetc(in_obj);
 	while ((tmp != EOF) && (0 != tmp - 'f')) {
 		if (0 == (tmp - 'v')) {
 			tmp = fgetc(in_obj);
 			if (0 == (tmp - ' ')) {
-				vertexes = read_vertex(in_obj, vertexes, counter - 1);
-				vertexes = (VERTEX*)realloc(vertexes, (++counter) * sizeof(VERTEX));
+				vertices = read_vertex(in_obj, vertices, counter - 1, zoom);
+				vertices = (VERTEX*)realloc(vertices, (++counter) * sizeof(VERTEX));
 			}
 		}
 		else
 			tmp = fgetc(in_obj);
 	}
-	return vertexes;
+	length = counter;
+	return vertices;
 }
 
 void draw_outline_of_triangle(RGB **image, RGB *color, TRIANGLE *tgl) {
 	draw_line_WU(image, color, set_vector(&tgl->one, &tgl->two));
 	draw_line_WU(image, color, set_vector(&tgl->two, &tgl->three));
 	draw_line_WU(image, color, set_vector(&tgl->three, &tgl->one));
+	free(color);
 }
 
 void draw_plain_triangle(RGB **image, RGB *color, TRIANGLE *tgl, double **z_buf, bool flip_f, bool free_f) {
@@ -214,7 +240,7 @@ void draw_plain_triangle(RGB **image, RGB *color, TRIANGLE *tgl, double **z_buf,
 		for (; x1 <= x2; x1++) {
 			double z = count_z_coord(x1, set_vector(one, two));
 			if (flip_f == 0) {
-				if (y > 0 && x1 > 0)
+				if (y >= 0 && x1 > 0 && y < HEIGHT && x1 < WIDTH)
 					if (check_coord(z_buf, x1, y, z)) { //check z-buffer
 						image[y][x1] = *color;
 						write_z_coord(z_buf, x1, y, z);
@@ -223,7 +249,7 @@ void draw_plain_triangle(RGB **image, RGB *color, TRIANGLE *tgl, double **z_buf,
 			else { // for reverse rotation
 				int y_r = fin_y - back_ctr;
 				//check z-buffer
-				if (y_r > 0 && x1 > 0)
+				if (y_r >= 0 && x1 > 0 && y_r < HEIGHT && x1 < WIDTH)
 					if (check_coord(z_buf, x1, y_r, z)){
 						image[y_r][x1] = *color;
 						write_z_coord(z_buf, x1, y_r, z);
@@ -260,9 +286,9 @@ TRIANGLE *sort_coords(TRIANGLE *tgl) {
 void draw_triangle(RGB **image, RGB *color, TRIANGLE *tgl, double **z_buf) {
 	tgl = sort_coords(tgl);
 	if (tgl->three.y == tgl->two.y)                // if it's a "plain" triangle
-		draw_plain_triangle(image, color, tgl, z_buf, 0, 0);
+		draw_plain_triangle(image, color, tgl, z_buf, false, false);
 	else if (tgl->one.y == tgl->two.y) {           // if it's an overturned "plain" triangle
-		draw_plain_triangle(image, color, tgl, z_buf, 1, 0);
+		draw_plain_triangle(image, color, tgl, z_buf, true,  false);
 	}
 	else {// if it's a triangle with different "Y" coordinates of vertices 
 		/* we must divide a triangle into two "plain" triangles
@@ -280,37 +306,81 @@ void draw_triangle(RGB **image, RGB *color, TRIANGLE *tgl, double **z_buf) {
 	free(color);
 }
 
-unsigned int read_arr_pos(FILE *obj) {
-	unsigned int out_val = 0;
-	char tmp;
-	while (0 != (tmp = fgetc(obj)) - '/') {
-		out_val = out_val * 10 + (tmp - '0');
+unsigned int *read_vertices_of_polygon(FILE *obj) {
+	unsigned int *out_val = NULL;
+	char tmp = '1';
+	for (int i = 0; 0 != tmp - '\n'; i++) {
+		out_val = (unsigned int*)realloc(out_val, sizeof(unsigned int) * (i + 1));
+		out_val[i] = 0;
+		while (0 != (tmp = fgetc(obj)) - '/') {
+			out_val[i] = out_val[i] * 10 + (tmp - '0');
+		}
+		out_val[i]--;
+		while ((0 != (tmp = fgetc(obj)) - ' ') && (0 != tmp - '\n')) {}
+		volume = i;
 	}
-	while ((0 != (tmp = fgetc(obj)) - ' ') && (0 != tmp - '\n')) {}
 	return out_val;
 }
 
-void draw_object(RGB **image, FILE *obj, VERTEX *vertexes, double **z_buf) {
+bool convex_corner(VERTEX *point, vector<VERTEX>* figure) {
+	bool parity = true;
+	for (unsigned int i = 0; i < figure->size(); i++) {
+		int max_y = max((*figure)[i].y, (*figure)[(i + 1) % figure->size()].y);
+		int min_y = min((*figure)[i].y, (*figure)[(i + 1) % figure->size()].y);
+		int max_x = max((*figure)[i].x, (*figure)[(i + 1) % figure->size()].x);
+		int min_x = min((*figure)[i].x, (*figure)[(i + 1) % figure->size()].x);
+		if ((*figure)[i].y != (*figure)[(i + 1) % figure->size()].y) {
+			//not consider horizontal lines
+			if (point->y <= max_y && point->y > min_y) {
+				//consider top vertex
+				if (point->y == max_y)
+					parity = !parity;
+				//consider crossing of line
+				else if (point->x < max_x) {
+					double factor = (max_y - min_y) / (double)(max_x - min_x);
+					double x = (min_x * factor - min_y + point->y) / factor;
+					if (x < point->x)
+						parity = !parity;
+				}
+			}
+		}
+	}
+	return parity;
+}
+
+void draw_object(RGB **image, FILE *obj, VERTEX *vertices, double **z_buf, bool triangle_f) {
 	char tmp = fgetc(obj);
 	while (tmp != EOF) {
 		if ((0 == tmp - 'f') && (0 == (tmp = fgetc(obj)) - ' ')) {
-			unsigned int first_v  = read_arr_pos(obj) - 1;
-			unsigned int second_v = read_arr_pos(obj) - 1;
-			unsigned int third_v  = read_arr_pos(obj) - 1;
-			TRIANGLE tmp_t;
-			tmp_t.one.x   = vertexes[first_v].x;
-			tmp_t.one.y   = vertexes[first_v].y;
-			tmp_t.one.z   = vertexes[first_v].z;
-			tmp_t.two.x   = vertexes[second_v].x;
-			tmp_t.two.y   = vertexes[second_v].y;
-			tmp_t.two.z   = vertexes[second_v].z;
-			tmp_t.three.x = vertexes[third_v].x;
-			tmp_t.three.y = vertexes[third_v].y;
-			tmp_t.three.z = vertexes[third_v].z;
-			draw_triangle(image, set_color(rand() % 255, rand() % 255, rand() % 255), &tmp_t, z_buf);
+			unsigned int *vertices_places = read_vertices_of_polygon(obj);
+			vector<VERTEX> polygon;
+			//read_vertices of polygon
+			for (unsigned int i = 0; i <= volume; i++)
+				polygon.push_back(vertices[vertices_places[i]]);
+			//triangulation by ear method
+			for (int i = 0; polygon.size() > 2; i = i++ % polygon.size()) {
+				VERTEX point = polygon[(i + 1) % polygon.size()];
+				vector<VERTEX> figure = polygon;
+				figure.erase(figure.begin() + (i + 1) % polygon.size());
+				if (convex_corner(&point, &figure)) {
+					TRIANGLE *tmp_t = set_triangle(&polygon[i], &polygon[(i + 1) % polygon.size()], &polygon[(i + 2) % polygon.size()]);
+					if (triangle_f)
+						draw_triangle(image, set_color(rand() % 256, rand() % 256, rand() % 256), tmp_t, z_buf);
+					else
+						draw_outline_of_triangle(image, set_color(rand() % 256, rand() % 256, rand() % 256), tmp_t);
+					free(tmp_t);
+					polygon = figure;
+				}
+			}
 			tmp = fgetc(obj);
 		}
 		else
 			tmp = fgetc(obj);
 	}
+}
+
+bool check_borders(int x, int y) {
+	if (y >= 0 && x >= 0 && y < WIDTH && x < HEIGHT)
+		return true;
+	return false;
 }

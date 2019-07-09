@@ -1,5 +1,13 @@
 #pragma once
 #include <iostream>
+#define WIDTH 2048
+#define HEIGHT 1152
+#define MID_WIDTH 1024 
+#define MID_HEIGHT 576
+
+extern int top_x, bottom_x;
+extern int top_y, bottom_y;
+extern unsigned int length;
 
 #pragma pack(push, 1)
 typedef struct {
@@ -53,27 +61,27 @@ typedef struct TRGL_COORDS {
 } TRIANGLE;
 
 void draw_plain_triangle(RGB**, RGB*, TRIANGLE*, double**, bool, bool);
-void write_z_coord(double **z_buf, int x, int y, int z);
+void write_z_coord(double**, int, int, double);
 void draw_triangle(RGB**, RGB*, TRIANGLE*, double**);
-void draw_object(RGB**, FILE*, VERTEX*, double**);
+void draw_object(RGB**, FILE*, VERTEX*, double**, bool);
 void draw_line_WU(RGB**, RGB*, LINE*);
 void plot(RGB*, RGB*, double);
 
 RGB *set_color(unsigned char, unsigned char, unsigned char);
 
-bool check_coord(double **z_buf, int x, int y, int z);
+bool check_coord(double**, int, int, double);
+bool check_borders(int, int);
 
 TRIANGLE *set_triangle(VERTEX*, VERTEX*, VERTEX*);
 TRIANGLE *sort_coords(TRIANGLE*);
 
-VERTEX *read_vertex(FILE*, VERTEX*, unsigned int);
+VERTEX *read_vertex(FILE*, VERTEX*, unsigned int, unsigned int);
 VERTEX *set_vertex(int, int, double);
-VERTEX *read_obj(FILE*);
+VERTEX *read_obj(FILE*, unsigned int);
 
 double count_z_coord(int x, LINE *line);
 
 LINE *set_vector(VERTEX*, VERTEX*);
 
-unsigned int read_arr_pos(FILE*);
-
+unsigned int *read_vertices_of_polygon(FILE*);
 int set_side(int);
