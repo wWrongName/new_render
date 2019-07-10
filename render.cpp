@@ -9,7 +9,7 @@ int top_y = -2147483647, bottom_y = 2147483647;
 int main(int argc, char** argv)
 {
 	char input_text[100];
-	std::cout << "Write .obj file path (C:\\...) and type ENTER: ";
+	std::cout << "Write path of .obj file (C:\\...) and type ENTER: ";
 	std::cin.getline(input_text, 100);
 	//input data (.obj file)
 	FILE *obj = fopen(input_text, "r");
@@ -17,7 +17,7 @@ int main(int argc, char** argv)
 		printf("File does not exist.\n");
 		return 1;
 	}
-	std::cout << "Write .bmp file path and type ENTER: ";
+	std::cout << "Write path of .bmp file and type ENTER: ";
 	std::cin.getline(input_text, 100);
 	//new output file (.bmp file)
 	FILE *out = fopen(input_text, "wb");
